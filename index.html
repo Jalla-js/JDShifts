@@ -9,7 +9,7 @@
 body {
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-  background: #0f0f12;
+  background: linear-gradient(180deg, #0f0f12, #141420);
   color: white;
   display: flex;
   justify-content: center;
@@ -18,7 +18,7 @@ body {
 
 .container {
   width: 100%;
-  max-width: 500px;
+  max-width: 520px;
 }
 
 .card {
@@ -27,17 +27,48 @@ body {
   border-radius: 20px;
   padding: 20px;
   margin-bottom: 20px;
+  border: 1px solid rgba(255,255,255,0.08);
+}
+
+.hero {
+  background: linear-gradient(145deg, rgba(255,255,255,0.08), rgba(255,255,255,0.02));
+  box-shadow: 0 0 30px rgba(255,255,255,0.05);
 }
 
 h1 {
   margin-top: 0;
-  font-size: 24px;
+  font-size: 22px;
+}
+
+.shift-title {
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.shift-time {
+  font-size: 14px;
+  opacity: 0.7;
+  margin-bottom: 10px;
 }
 
 .countdown {
   font-size: 32px;
   font-weight: bold;
-  margin-top: 10px;
+}
+
+.progress-bar {
+  height: 6px;
+  background: rgba(255,255,255,0.08);
+  border-radius: 6px;
+  margin-top: 12px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #6e8efb, #a777e3);
+  transition: width 1s linear;
 }
 
 .shift {
@@ -53,85 +84,123 @@ h1 {
   font-size: 14px;
   opacity: 0.7;
 }
+
+.stat {
+  font-size: 16px;
+  margin-top: 6px;
+}
+
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.day {
+  padding: 10px 0;
+  text-align: center;
+  border-radius: 10px;
+  font-size: 12px;
+  background: rgba(255,255,255,0.04);
+}
+
+.day.shift-day {
+  background: linear-gradient(135deg, #6e8efb33, #a777e333);
+  border: 1px solid rgba(255,255,255,0.1);
+}
 </style>
 </head>
 <body>
 
 <div class="container">
-  <div class="card">
-    <h1>Next Shift Countdown</h1>
-    <div id="countdown" class="countdown">Loading...</div>
+
+  <!-- HERO CARD -->
+  <div class="card hero">
+    <h1>Next Shift</h1>
+    <div id="nextShiftTitle" class="shift-title">Loading...</div>
+    <div id="nextShiftTime" class="shift-time"></div>
+    <div id="countdown" class="countdown"></div>
+    <div class="progress-bar">
+      <div id="progressFill" class="progress-fill"></div>
+    </div>
   </div>
 
+  <!-- STATS CARD -->
+  <div class="card">
+    <h1>This Week</h1>
+    <div id="weeklyHours" class="stat"></div>
+    <div id="weeklyPay" class="stat"></div>
+  </div>
+
+  <!-- CALENDAR CARD -->
+  <div class="card">
+    <h1>Weekly Overview</h1>
+    <div id="calendarGrid" class="calendar-grid"></div>
+  </div>
+
+  <!-- UPCOMING SHIFTS -->
   <div class="card">
     <h1>Upcoming Shifts</h1>
     <div id="shiftList">Loading...</div>
   </div>
+
 </div>
+
 <script>
-  window.onerror = function(message, source, lineno, colno, error) {
-  alert("ERROR: " + message + " at line " + lineno);
-};
 const ICS_URL = "https://spoons-shifts.06allanjosh.workers.dev";
+const HOURLY_RATE = 12.31; // CHANGE THIS
 
 async function loadShifts() {
-  try {
-    const response = await fetch(ICS_URL);
-    const text = await response.text();
+  const response = await fetch(ICS_URL);
+  const text = await response.text();
 
-    const rawEvents = text.split("BEGIN:VEVENT").slice(1);
-    const now = new Date();
+  const rawEvents = text.split("BEGIN:VEVENT").slice(1);
+  const now = new Date();
 
-    const shifts = rawEvents.map(event => {
+  const shifts = rawEvents.map(event => {
+    const summary = event.match(/SUMMARY:(.*)/)?.[1]?.trim();
+    const startMatch = event.match(/DTSTART.*:(.*)/);
+    const endMatch = event.match(/DTEND.*:(.*)/);
+    if (!startMatch) return null;
 
-      const summary = event.match(/SUMMARY:(.*)/)?.[1]?.trim();
+    const start = parseICSDate(startMatch[1]);
+    const end = parseICSDate(endMatch[1]);
+    return { title: summary, start, end };
+  }).filter(Boolean)
+    .sort((a,b) => a.start - b.start);
 
-      const startMatch = event.match(/DTSTART.*:(.*)/);
-      const endMatch = event.match(/DTEND.*:(.*)/);
+  const upcoming = shifts.filter(s => s.start > now).slice(0,4);
 
-      if (!startMatch) return null;
+  displayShifts(upcoming);
+  if (upcoming.length > 0) startCountdown(upcoming[0]);
 
-      const start = parseICSDate(startMatch[1]);
-      const end = parseICSDate(endMatch[1]);
-
-      return { title: summary, start, end };
-
-    }).filter(shift => shift && shift.start > now)
-      .sort((a,b) => a.start - b.start)
-      .slice(0,4);
-
-    displayShifts(shifts);
-
-    if (shifts.length > 0) {
-      startCountdown(shifts[0]);
-    }
-
-  } catch (err) {
-    console.error("Error loading shifts:", err);
-  }
+  updateWeeklyStats(shifts);
+  renderCalendar(shifts);
 }
 
 function parseICSDate(dateString) {
-  const year = dateString.substring(0,4);
-  const month = dateString.substring(4,6);
-  const day = dateString.substring(6,8);
-  const hour = dateString.substring(9,11);
-  const minute = dateString.substring(11,13);
-
-  return new Date(year, month - 1, day, hour, minute);
+  return new Date(
+    dateString.substring(0,4),
+    dateString.substring(4,6) - 1,
+    dateString.substring(6,8),
+    dateString.substring(9,11),
+    dateString.substring(11,13)
+  );
 }
 
 function displayShifts(shifts) {
   const list = document.getElementById("shiftList");
   list.innerHTML = "";
-
   shifts.forEach(shift => {
     const div = document.createElement("div");
     div.className = "shift";
     div.innerHTML = `
       <strong>${shift.title}</strong>
       <div class="time">
-        ${shift.start.toLocaleString()} - ${shift.end.toLocaleTimeString()}
+        ${shift.start.toLocaleDateString()} • 
+        ${shift.start.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})} - 
+        ${shift.end.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}
       </div>
     `;
     list.appendChild(div);
@@ -139,32 +208,96 @@ function displayShifts(shifts) {
 }
 
 function startCountdown(nextShift) {
+  const titleEl = document.getElementById("nextShiftTitle");
+  const timeEl = document.getElementById("nextShiftTime");
   const countdownEl = document.getElementById("countdown");
+  const progressFill = document.getElementById("progressFill");
+
+  titleEl.textContent = nextShift.title;
+  timeEl.textContent =
+    `${nextShift.start.toLocaleDateString()} • ` +
+    `${nextShift.start.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})} - ` +
+    `${nextShift.end.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}`;
 
   function update() {
     const now = new Date();
     const diff = nextShift.start - now;
 
-    if (diff <= 0) {
-      countdownEl.textContent = "You're at work 😭";
+    if (diff <= 0 && now < nextShift.end) {
+      countdownEl.textContent = "Ends in " + format(diff * -1);
+      progressFill.style.width = "100%";
       return;
     }
 
-    const hours = Math.floor(diff / (1000 * 60 * 60));
-    const minutes = Math.floor((diff / (1000 * 60)) % 60);
-    const seconds = Math.floor((diff / 1000) % 60);
+    if (diff <= 0) {
+      countdownEl.textContent = "Shift complete 🎉";
+      progressFill.style.width = "100%";
+      return;
+    }
 
-    countdownEl.textContent = `${hours}h ${minutes}m ${seconds}s`;
+    countdownEl.textContent = format(diff);
+    const dayStart = new Date(nextShift.start);
+    dayStart.setHours(0,0,0,0);
+    const percent = ((now - dayStart) / (nextShift.start - dayStart)) * 100;
+    progressFill.style.width = Math.min(percent,100) + "%";
+  }
+
+  function format(ms) {
+    ms = Math.abs(ms);
+    const h = Math.floor(ms / 3600000);
+    const m = Math.floor((ms % 3600000) / 60000);
+    const s = Math.floor((ms % 60000) / 1000);
+    return `${h}h ${m}m ${s}s`;
   }
 
   update();
   setInterval(update, 1000);
 }
 
-window.onerror = function(message, source, lineno, colno, error) {
-  alert("ERROR: " + message + " at line " + lineno);
-};
-loadShifts()
+function updateWeeklyStats(shifts) {
+  const now = new Date();
+  const startOfWeek = new Date(now);
+  startOfWeek.setDate(now.getDate() - now.getDay());
+  startOfWeek.setHours(0,0,0,0);
+
+  let totalMs = 0;
+
+  shifts.forEach(shift => {
+    if (shift.start >= startOfWeek && shift.start < new Date(startOfWeek.getTime() + 7*86400000)) {
+      totalMs += (shift.end - shift.start);
+    }
+  });
+
+  const hours = (totalMs / 3600000).toFixed(1);
+  const pay = (hours * HOURLY_RATE).toFixed(2);
+
+  document.getElementById("weeklyHours").textContent = `Hours: ${hours}`;
+  document.getElementById("weeklyPay").textContent = `Estimated Pay: £${pay}`;
+}
+
+function renderCalendar(shifts) {
+  const grid = document.getElementById("calendarGrid");
+  grid.innerHTML = "";
+
+  const now = new Date();
+  const startOfWeek = new Date(now);
+  startOfWeek.setDate(now.getDate() - now.getDay());
+  startOfWeek.setHours(0,0,0,0);
+
+  for (let i = 0; i < 7; i++) {
+    const day = new Date(startOfWeek.getTime() + i*86400000);
+    const hasShift = shifts.some(s => 
+      s.start.toDateString() === day.toDateString()
+    );
+
+    const div = document.createElement("div");
+    div.className = "day" + (hasShift ? " shift-day" : "");
+    div.textContent = day.toLocaleDateString([], {weekday:'short'});
+    grid.appendChild(div);
+  }
+}
+
+loadShifts();
 </script>
 
 </body>
