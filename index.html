@@ -256,14 +256,22 @@ function startCountdown(nextShift) {
 
 function updateWeeklyStats(shifts) {
   const now = new Date();
+
+  // Make Monday the first day
+  const day = now.getDay();
+  const diffToMonday = (day === 0 ? -6 : 1) - day;
+
   const startOfWeek = new Date(now);
-  startOfWeek.setDate(now.getDate() - now.getDay());
+  startOfWeek.setDate(now.getDate() + diffToMonday);
   startOfWeek.setHours(0,0,0,0);
+
+  const endOfWeek = new Date(startOfWeek);
+  endOfWeek.setDate(startOfWeek.getDate() + 7);
 
   let totalMs = 0;
 
   shifts.forEach(shift => {
-    if (shift.start >= startOfWeek && shift.start < new Date(startOfWeek.getTime() + 7*86400000)) {
+    if (shift.start >= startOfWeek && shift.start < endOfWeek) {
       totalMs += (shift.end - shift.start);
     }
   });
@@ -280,19 +288,31 @@ function renderCalendar(shifts) {
   grid.innerHTML = "";
 
   const now = new Date();
+
+  const day = now.getDay();
+  const diffToMonday = (day === 0 ? -6 : 1) - day;
+
   const startOfWeek = new Date(now);
-  startOfWeek.setDate(now.getDate() - now.getDay());
+  startOfWeek.setDate(now.getDate() + diffToMonday);
   startOfWeek.setHours(0,0,0,0);
 
   for (let i = 0; i < 7; i++) {
-    const day = new Date(startOfWeek.getTime() + i*86400000);
-    const hasShift = shifts.some(s => 
-      s.start.toDateString() === day.toDateString()
+    const currentDay = new Date(startOfWeek);
+    currentDay.setDate(startOfWeek.getDate() + i);
+
+    const hasShift = shifts.some(s =>
+      s.start.toDateString() === currentDay.toDateString()
     );
 
     const div = document.createElement("div");
     div.className = "day" + (hasShift ? " shift-day" : "");
-    div.textContent = day.toLocaleDateString([], {weekday:'short'});
+
+    div.innerHTML = `
+      ${currentDay.toLocaleDateString([], {weekday:'short'})}
+      <br>
+      ${currentDay.getDate()}
+    `;
+
     grid.appendChild(div);
   }
 }
