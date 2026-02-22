@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Shift Dashboard</title>
+
+<style>
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+  background: #0f0f12;
+  color: white;
+  display: flex;
+  justify-content: center;
+  padding: 40px 20px;
+}
+
+.container {
+  width: 100%;
+  max-width: 500px;
+}
+
+.card {
+  background: rgba(255,255,255,0.05);
+  backdrop-filter: blur(20px);
+  border-radius: 20px;
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+h1 {
+  margin-top: 0;
+  font-size: 24px;
+}
+
+.countdown {
+  font-size: 32px;
+  font-weight: bold;
+  margin-top: 10px;
+}
+
+.shift {
+  padding: 12px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+
+.shift:last-child {
+  border-bottom: none;
+}
+
+.time {
+  font-size: 14px;
+  opacity: 0.7;
+}
+</style>
+</head>
+<body>
+
+<div class="container">
+  <div class="card">
+    <h1>Next Shift Countdown</h1>
+    <div id="countdown" class="countdown">Loading...</div>
+  </div>
+
+  <div class="card">
+    <h1>Upcoming Shifts</h1>
+    <div id="shiftList">Loading...</div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/ical.js/dist/ical.min.js"></script>
+<script>
+const ICS_URL = "https://api.myjdwschedule.co.uk/calendars/a71ba557-a523-45d8-9775-f45fec324975.ics";
+
+async function loadShifts() {
+  const response = await fetch(ICS_URL);
+  const text = await response.text();
+
+  const jcalData = ICAL.parse(text);
+  const comp = new ICAL.Component(jcalData);
+  const events = comp.getAllSubcomponents("vevent");
+
+  const now = new Date();
+
+  const shifts = events
+    .map(e => {
+      const event = new ICAL.Event(e);
+      return {
+        title: event.summary,
+        start: event.startDate.toJSDate(),
+        end: event.endDate.toJSDate()
+      };
+    })
+    .filter(shift => shift.start > now)
+    .sort((a,b) => a.start - b.start)
+    .slice(0, 4);
+
+  displayShifts(shifts);
+  startCountdown(shifts[0]);
+}
+
+function displayShifts(shifts) {
+  const list = document.getElementById("shiftList");
+  list.innerHTML = "";
+
+  shifts.forEach(shift => {
+    const div = document.createElement("div");
+    div.className = "shift";
+    div.innerHTML = `
+      <strong>${shift.title}</strong>
+      <div class="time">
+        ${shift.start.toLocaleString()} - ${shift.end.toLocaleTimeString()}
+      </div>
+    `;
+    list.appendChild(div);
+  });
+}
+
+function startCountdown(nextShift) {
+  const countdownEl = document.getElementById("countdown");
+
+  function update() {
+    const now = new Date();
+    const diff = nextShift.start - now;
+
+    if (diff <= 0) {
+      countdownEl.textContent = "You're at work 😭";
+      return;
+    }
+
+    const hours = Math.floor(diff / (1000 * 60 * 60));
+    const minutes = Math.floor((diff / (1000 * 60)) % 60);
+    const seconds = Math.floor((diff / 1000) % 60);
+
+    countdownEl.textContent = `${hours}h ${minutes}m ${seconds}s`;
+  }
+
+  update();
+  setInterval(update, 1000);
+}
+
+loadShifts();
+</script>
+
+</body>
+</html>
