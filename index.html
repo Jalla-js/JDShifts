@@ -79,27 +79,31 @@ async function loadShifts() {
     const text = await response.text();
 
     const rawEvents = text.split("BEGIN:VEVENT").slice(1);
-
     const now = new Date();
 
     const shifts = rawEvents.map(event => {
+
       const summary = event.match(/SUMMARY:(.*)/)?.[1]?.trim();
-      const startRaw = event.match(/DTSTART:(.*)/)?.[1]?.trim();
-      const endRaw = event.match(/DTEND:(.*)/)?.[1]?.trim();
 
-      if (!startRaw) return null;
+      const startMatch = event.match(/DTSTART.*:(.*)/);
+      const endMatch = event.match(/DTEND.*:(.*)/);
 
-      const start = parseICSDate(startRaw);
-      const end = parseICSDate(endRaw);
+      if (!startMatch) return null;
+
+      const start = parseICSDate(startMatch[1]);
+      const end = parseICSDate(endMatch[1]);
 
       return { title: summary, start, end };
-    })
-    .filter(shift => shift && shift.start > now)
-    .sort((a,b) => a.start - b.start)
-    .slice(0, 4);
+
+    }).filter(shift => shift && shift.start > now)
+      .sort((a,b) => a.start - b.start)
+      .slice(0,4);
 
     displayShifts(shifts);
-    startCountdown(shifts[0]);
+
+    if (shifts.length > 0) {
+      startCountdown(shifts[0]);
+    }
 
   } catch (err) {
     console.error("Error loading shifts:", err);
@@ -107,14 +111,13 @@ async function loadShifts() {
 }
 
 function parseICSDate(dateString) {
-  // Handles format like 20260222T090000Z
   const year = dateString.substring(0,4);
   const month = dateString.substring(4,6);
   const day = dateString.substring(6,8);
   const hour = dateString.substring(9,11);
   const minute = dateString.substring(11,13);
 
-  return new Date(`${year}-${month}-${day}T${hour}:${minute}:00`);
+  return new Date(year, month - 1, day, hour, minute);
 }
 
 function displayShifts(shifts) {
@@ -157,7 +160,7 @@ function startCountdown(nextShift) {
   setInterval(update, 1000);
 }
 
-loadShifts();
+loadShifts()
 </script>
 
 </body>
