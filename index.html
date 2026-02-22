@@ -163,6 +163,9 @@ function startCountdown(nextShift) {
   setInterval(update, 1000);
 }
 
+window.onerror = function(message, source, lineno, colno, error) {
+  alert("ERROR: " + message + " at line " + lineno);
+};
 loadShifts()
 </script>
 
